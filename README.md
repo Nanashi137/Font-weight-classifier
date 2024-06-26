@@ -2,7 +2,8 @@ Install requirements:
      pip install -r requirements.txt
 
 Create a data folder in workspace: 
-  ...\data
+
+   \data
       ├───bold
       ├───bold_italic
       ├───italic
