@@ -1,4 +1,5 @@
 import cv2 as cv 
+import numpy as np
 
 from collections import OrderedDict
 
@@ -6,7 +7,7 @@ from model.lightning_wrappers import DeepFontWrapper
 from model.deepfont import DeepFont, DeepFontAutoencoder
 import torch 
 import torch.nn.functional as F 
-from dataset.transformations import IPtrans
+from dataset.transformations import IPtrans, inference_input
 import time
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -37,21 +38,34 @@ def load_model(checkpoint_path, n_classes, device):
     return DeepFontWrapper(model= df, num_classes= n_classes).to(device)
 
 
+def ensemble_predict(model, img):
+    all_soft_preds = []
+    squeeze_ratio=np.random.uniform(low=1.5, high=3.5)
+    for _ in range(2):
+        patches = [inference_input(img, squeezing_ratio=squeeze_ratio) for _ in range(5)]
+        # return patches
+        inputs = torch.tensor(np.asarray(patches))
+
+        preds = model(inputs.cuda())
+        soft_preds = F.softmax(preds, dim=1)
+        all_soft_preds.append(soft_preds)
+
+    probs = torch.cat(all_soft_preds).mean(0)
+    return ID2LABELS[probs.argmax().item()], torch.round(probs, decimals=3).tolist()
+
 
 
 if __name__=="__main__": 
     img1 = cv.imread("v5.png", cv.IMREAD_GRAYSCALE)
-    img2 = cv.imread("1.jpg", cv.IMREAD_GRAYSCALE)
 
     #Loading model  
-    
-    model = load_model("output_df/last.ckpt", n_classes=4, device=device)
+    model = load_model("output_df/r.ckpt", n_classes=4, device=device)
     
     infer_b = time.time()
-    pred1 = predict(model, img=img1)
-    pred2 = predict(model, img=img2)
+    pred1, score = ensemble_predict(model, img=img1)
     print(f"Inference time: {time.time() - infer_b}")
-    cv.imshow(pred1, img1)
-    cv.imshow(pred2, img2)
-    cv.waitKey(0)
+    print(pred1)
+    print(np.argmax(np.array(score)))
+    # cv.imshow("img", img1)
+    # cv.waitKey(0)
     
