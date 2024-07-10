@@ -142,10 +142,12 @@ class Inverse(ImageOnlyTransform):
     """
     Inverse pixels value in the image
     """
-    def __init__(self, alway_apply=False, p=0.4) -> None: 
+
+    def __init__(self, alway_apply=False, p=0.3) -> None: 
         super(Inverse, self).__init__(alway_apply, p)
 
     def apply(self, img, **params):
+
         iimg = inverse_pixel(img) 
         return iimg 
 
@@ -157,7 +159,7 @@ def get_deepfont_base_augmentations() -> A.Compose:
             A.GaussianBlur(blur_limit=(1, 3), p=0.5),
             # Images are expected to be grayscale and have a white background, so
             # use the 255 value as a filler.
-            A.Affine(rotate=[-3, 3], cval=255, p=0.5),
+            A.Affine(rotate=[-1.5, 1.5], cval=125, p=0.5),
             A.MultiplicativeNoise(multiplier=(0.3, 0.8), p=0.5),
         ]
     )
@@ -188,12 +190,12 @@ def get_deepfont_full_transformation() -> A.Compose:
         [
             A.Sequential(
                 [
-                    ResizeHeight(target_height=105, always_apply=True),
-                    #get_deepfont_base_augmentations(),
-                    #get_deepfont_feature_enhancement(),
-                    PickRandomPatch(constrained_patches=False, always_apply=True),
-                    #A.ToFloat(255, always_apply=True),
-                    #ToTensorV2(),
+                    ResizeHeight(target_height=105, always_apply=True, p=1.0),
+                    get_deepfont_base_augmentations(),
+                    get_deepfont_feature_enhancement(),
+                    PickRandomPatch(constrained_patches=False, always_apply=True, p=1.0),
+                    A.ToFloat(255, always_apply=True),
+                    ToTensorV2(),
                 ]
             ),
         ]
@@ -227,6 +229,7 @@ def get_random_square_patch_augmentation() -> A.Compose:
     )
 
 
+
 def get_test_augmentations(squeeze_ratio: float) -> A.Compose:
     return A.Sequential(
         [
@@ -235,13 +238,35 @@ def get_test_augmentations(squeeze_ratio: float) -> A.Compose:
         ]
     )
 
+def inference_input(img, squeezing_ratio=2.5): 
+    t1 = ResizeHeight(target_height= 105, always_apply= True)
+    t2 = VariableAspectRatio(ratio_range=[0.83, 1.17], always_apply=True)
+    t3 = Squeezing(squeeze_ratio=squeezing_ratio, always_apply=True)
+    t4 = PickRandomPatch(constrained_patches=False, always_apply=True)
+    t5 = A.ToFloat(255, always_apply=True)
+    t6 = ToTensorV2(always_apply=True)
+
+
+    img = t1.apply(img)
+    img = t2.apply(img)
+    img = t3.apply(img)
+    img = t4.apply(img)
+    img = t5.apply(img)
+    img = t6.apply(img)
+
+    return img
+
 def IPtrans(img):
     t1 = ResizeHeight(target_height= 105, always_apply= True)
     t2 = PickRandomPatch(constrained_patches=False, always_apply=True)
     t3 = A.ToFloat(255, always_apply=True)
     t4 = ToTensorV2(always_apply=True)
+    te1 = VariableAspectRatio(ratio_range=[0.83, 1.17], always_apply=True)
+    te2 = Squeezing(squeeze_ratio=2.5, always_apply=True)
 
     img = t1.apply(img)
+    img = te1.apply(img)
+    img = te2.apply(img)
     img = t2.apply(img)
     img = t3.apply(img)
     return t4.apply(img)
@@ -250,17 +275,52 @@ def IPtrans(img):
 
 def Ptrans(img): 
     t1 = ResizeHeight(target_height= 105, always_apply= True)
-    c = np.random.randint(0, 2)
-    t1_5 = Inverse(alway_apply=False)
     t2 = PickRandomPatch(constrained_patches=False, always_apply=True)
     t3 = A.ToFloat(255, always_apply=True)
     t4 = ToTensorV2(always_apply=True)
+    te1 = VariableAspectRatio(ratio_range=[0.83, 1.17], always_apply=True)
+    te2 = Squeezing(squeeze_ratio=2.5, always_apply=True)
 
-    img = cv.GaussianBlur(img, (3,3), 0)
+    img = Preprocess(img)
+
     img = t1.apply(img)
-    if c%2 == 0: 
-        img = t1_5.apply(img)
+
+    #Enhance image    
+    img = te1.apply(img)
+    img = te2.apply(img)
+    #Patching, normalize and tensorize
     img = t2.apply(img)
     img = t3.apply(img)
     img = t4.apply(img)
     return img
+
+def Ptrans2(img): 
+    t1 = ResizeHeight(target_height= 105, always_apply= True)
+    t2 = PickRandomPatch(constrained_patches=False, always_apply=True)
+    te1 = VariableAspectRatio(ratio_range=[0.83, 1.17], always_apply=True)
+    te2 = Squeezing(squeeze_ratio=2.5, always_apply=True)
+
+    img = Preprocess(img)
+
+    img = t1.apply(img)
+
+    #Enhance image    
+    img = te1.apply(img)
+    img = te2.apply(img)
+    #Patching, normalize and tensorize
+    img = t2.apply(img)
+    return img
+
+
+
+def Preprocess(img):
+    my_transform = get_deepfont_base_augmentations()
+    result = my_transform(image=img, force_apply=True)['image']
+
+    c = np.random.randint(0, 2)
+    t1_5 = Inverse(alway_apply=False, p=0.3)
+    if c%2 == 1: 
+        result = t1_5.apply(result)
+
+
+    return result
